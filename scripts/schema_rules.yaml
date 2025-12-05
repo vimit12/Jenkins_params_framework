@@ -1,26 +1,201 @@
 # scripts/schema_rules.yaml
-# Define custom schema rules based on parameter name patterns
+# Comprehensive schema customization rules for Jenkins parameter validation
 
+# Custom validation rules for specific parameters
 rules:
+  # String parameters with patterns
+  APP_NAME:
+    type: string
+    minLength: 2
+    maxLength: 50
+    pattern: "^[a-z0-9](-?[a-z0-9])*$"
+    description: "Application name (lowercase alphanumeric with hyphens)"
+
+  IMAGE_TAG:
+    type: string
+    pattern: "^[a-zA-Z0-9._-]+$"
+    minLength: 1
+    maxLength: 128
+    description: "Docker image tag"
+
+  VERSION:
+    type: string
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9]+)?$"
+    description: "Semantic version format (e.g., 1.2.3 or 1.2.3-rc1)"
+
+  # Integer parameters with range constraints
   REPLICAS:
     type: integer
     minimum: 1
     maximum: 20
     x-coerce: true
+    description: "Number of replicas"
 
-  TAG:
-    pattern: "^[a-zA-Z0-9._-]+$"
-    
-  VERSION:
-    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
-    
+  PORT:
+    type: integer
+    minimum: 1024
+    maximum: 65535
+    x-coerce: true
+    description: "Port number"
+
+  # Resource limits
   CPU_LIMIT:
-    pattern: "^[0-9]+m$"
-    
-  MEMORY_LIMIT:
-    pattern: "^[0-9]+Mi$"
+    type: string
+    pattern: "^[0-9]+(m|)$"
+    description: "CPU limit (e.g., 500m or 2)"
 
+  MEMORY_LIMIT:
+    type: string
+    pattern: "^[0-9]+(Mi|Gi)$"
+    description: "Memory limit (e.g., 512Mi or 2Gi)"
+
+  # Enum constraints
+  LOG_LEVEL:
+    type: string
+    enum: ["DEBUG", "INFO", "WARNING", "ERROR"]
+    description: "Logging level"
+
+  # JSON object with nested schema
+  CONFIG_JSON:
+    type: object
+    x-coerce: true
+    properties:
+      replicas:
+        type: integer
+        minimum: 1
+      version:
+        type: string
+      debug:
+        type: boolean
+    required: ["version"]
+    description: "Configuration JSON object"
+
+  # Array parameters
+  TAGS:
+    type: array
+    x-coerce: true
+    items:
+      type: string
+      pattern: "^[a-z0-9-]+$"
+    minItems: 1
+    maxItems: 10
+    description: "List of tags"
+
+  # Email validation
+  EMAIL:
+    type: string
+    format: email
+    description: "Email address"
+
+  # URL validation
+  WEBHOOK_URL:
+    type: string
+    format: uri
+    description: "Webhook URL"
+
+  # Date/Time validation
+  DEPLOYMENT_DATE:
+    type: string
+    format: date-time
+    description: "Deployment timestamp (ISO 8601)"
+
+  # Special formats
+  GIT_COMMIT:
+    type: string
+    pattern: "^[a-f0-9]{40}$"
+    description: "Git commit SHA-1 hash"
+
+  GIT_BRANCH:
+    type: string
+    pattern: "^[a-zA-Z0-9._/\\-]+$"
+    description: "Git branch name"
+
+  # Conditional validation rules
+  DATABASE_HOST:
+    type: string
+    minLength: 1
+    description: "Database hostname"
+    # Note: Add custom validators in plugins.py for complex logic
+
+  DATABASE_PORT:
+    type: integer
+    minimum: 1
+    maximum: 65535
+    x-coerce: true
+    description: "Database port"
+
+  # Boolean flags with coercion
+  ENABLE_CACHING:
+    type: boolean
+    x-coerce: true
+    description: "Enable caching"
+
+  SKIP_TESTS:
+    type: boolean
+    x-coerce: true
+    description: "Skip running tests"
+
+  ALLOW_PROD_DEPLOY:
+    type: boolean
+    x-coerce: true
+    description: "Allow production deployment"
+
+  # Multiline text
+  BUILD_NOTES:
+    type: string
+    minLength: 0
+    maxLength: 1000
+    description: "Build notes (multiline text)"
+
+# Required fields that must be present
 required_fields:
   - APP_NAME
   - IMAGE_TAG
   - ENV
+
+# Custom validators to run (references to Python modules)
+custom_validators:
+  - "jenkins_param_validator.validators:validate_deployment_rules"
+  - "jenkins_param_validator.validators:validate_resource_limits"
+
+# Conditional requirements: if one field is set, another must be too
+conditional_required:
+  - condition: "ENV == 'prod'"
+    requires: ["ALLOW_PROD_DEPLOY"]
+  - condition: "DATABASE_HOST"
+    requires: ["DATABASE_PORT"]
+
+# Mutually exclusive fields: only one can be provided
+mutually_exclusive:
+  - ["SKIP_TESTS", "RUN_TESTS"]
+  - ["ENABLE_CACHING", "DISABLE_CACHING"]
+
+# Custom error messages
+error_messages:
+  APP_NAME:
+    pattern: "App name must contain only lowercase letters, numbers, and hyphens"
+    minLength: "App name must be at least 2 characters"
+  
+  REPLICAS:
+    minimum: "At least 1 replica is required"
+    maximum: "Maximum 20 replicas allowed"
+  
+  DEPLOYMENT_DATE:
+    format: "Must be a valid ISO 8601 timestamp"
+
+# Advanced options
+options:
+  # Coerce all string numbers to integers if matching pattern
+  auto_coerce_numbers: false
+  
+  # Strict mode: reject unknown parameters
+  strict_mode: true
+  
+  # Allow null values for optional fields
+  allow_null: false
+  
+  # Case-sensitive enum values
+  case_sensitive_enum: true
+  
+  # Trim whitespace from strings
+  trim_strings: true
