@@ -25,10 +25,20 @@ pipeline {
 
         stage('Write Params JSON') {
             steps {
-                script {
-                    // 'params' is a builtin map with all input parameters
-                    writeJSON file: 'input.json', json: params, pretty: 4
-                }
+                sh '''
+                    cat > input.json << 'EOF'
+{
+  "APP_NAME": "${APP_NAME}",
+  "IMAGE_TAG": "${IMAGE_TAG}",
+  "ENV": "${ENV}",
+  "RUN_TESTS": "${RUN_TESTS}",
+  "REPLICAS": "${REPLICAS}",
+  "CPU_LIMIT": "${CPU_LIMIT}",
+  "MEMORY_LIMIT": "${MEMORY_LIMIT}",
+  "ALLOW_PROD_DEPLOY": "${ALLOW_PROD_DEPLOY}"
+}
+EOF
+                '''
             }
         }
 
