@@ -1,4 +1,5 @@
 # jenkins_param_validator/coercion.py
+import json
 from typing import Any, Dict
 
 
@@ -29,6 +30,29 @@ def _coerce_simple(value: Any, target_type: str):
     if target_type == "string":
         return str(value)
 
+    if target_type == "object":
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                raise ValueError(f"Cannot parse JSON: {value}")
+        raise ValueError(f"Cannot coerce to object: {type(value).__name__}")
+
+    if target_type == "array":
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                if not isinstance(parsed, list):
+                    raise ValueError(f"JSON is not an array: {type(parsed).__name__}")
+                return parsed
+            except json.JSONDecodeError:
+                raise ValueError(f"Cannot parse JSON array: {value}")
+        raise ValueError(f"Cannot coerce to array: {type(value).__name__}")
+
     # arrays, objects — handled elsewhere or left untouched
     return value
 
@@ -37,7 +61,12 @@ def coerce_data(data: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
     """
     Walks top-level properties and coerces based on schema["properties"][key]["type"]
     if x-coerce=true is set.
-    You can extend this to nested objects later.
+    Supports: integer, number, boolean, string, object, array
+
+    Examples:
+    - string '{"key": "value"}' -> object {"key": "value"}
+    - string '[1, 2, 3]' -> array [1, 2, 3]
+    - string '42' -> integer 42
     """
     props = schema.get("properties", {})
     result = dict(data)

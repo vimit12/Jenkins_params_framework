@@ -29,6 +29,12 @@ pipeline {
             }
         }
 
+        stage('Generate Schema') {
+            steps {
+                sh 'python3 scripts/generate_schema.py --jenkinsfile Jenkinsfile --output ${PARAM_SCHEMA}'
+            }
+        }
+
         stage('Write Params JSON') {
             steps {
                 sh """

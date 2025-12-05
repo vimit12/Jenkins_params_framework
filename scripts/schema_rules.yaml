@@ -1,0 +1,26 @@
+# scripts/schema_rules.yaml
+# Define custom schema rules based on parameter name patterns
+
+rules:
+  REPLICAS:
+    type: integer
+    minimum: 1
+    maximum: 20
+    x-coerce: true
+
+  TAG:
+    pattern: "^[a-zA-Z0-9._-]+$"
+    
+  VERSION:
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    
+  CPU_LIMIT:
+    pattern: "^[0-9]+m$"
+    
+  MEMORY_LIMIT:
+    pattern: "^[0-9]+Mi$"
+
+required_fields:
+  - APP_NAME
+  - IMAGE_TAG
+  - ENV
