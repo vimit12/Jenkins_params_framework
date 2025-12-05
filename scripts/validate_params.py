@@ -1,6 +1,11 @@
 # scripts/validate_params.py
 import argparse
 import sys
+import os
+
+# Add workspace root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from jenkins_param_validator.engine import validate_params, ValidationError
 
 
