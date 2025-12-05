@@ -52,8 +52,5 @@
     "IMAGE_TAG",
     "ENV"
   ],
-  "additionalProperties": false,
-  "x-validators": [
-    "team_validators.deploy_rules:validate_deploy"
-  ]
+  "additionalProperties": false
 }
