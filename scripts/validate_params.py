@@ -16,7 +16,13 @@ console = Console()
 
 def display_error_table(errors):
     """Display validation errors in a formatted table"""
-    table = Table(title="❌ Validation Error Details", show_header=True, header_style="bold red")
+    table = Table(
+        title="❌ Validation Error Details", 
+        show_header=True, 
+        header_style="bold red",
+        border_style="blue",
+        show_lines=True
+    )
     table.add_column("Field Name", style="cyan")
     table.add_column("Value", style="yellow")
     table.add_column("Type", style="magenta")
