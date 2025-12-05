@@ -31,20 +31,20 @@ pipeline {
 
         stage('Write Params JSON') {
             steps {
-                sh '''
+                sh """
                     cat > input.json << 'EOF'
 {
-  "APP_NAME": "${APP_NAME}",
-  "IMAGE_TAG": "${IMAGE_TAG}",
-  "ENV": "${ENV}",
-  "RUN_TESTS": "${RUN_TESTS}",
-  "REPLICAS": "${REPLICAS}",
-  "CPU_LIMIT": "${CPU_LIMIT}",
-  "MEMORY_LIMIT": "${MEMORY_LIMIT}",
-  "ALLOW_PROD_DEPLOY": "${ALLOW_PROD_DEPLOY}"
+  "APP_NAME": "${params.APP_NAME}",
+  "IMAGE_TAG": "${params.IMAGE_TAG}",
+  "ENV": "${params.ENV}",
+  "RUN_TESTS": "${params.RUN_TESTS}",
+  "REPLICAS": "${params.REPLICAS}",
+  "CPU_LIMIT": "${params.CPU_LIMIT}",
+  "MEMORY_LIMIT": "${params.MEMORY_LIMIT}",
+  "ALLOW_PROD_DEPLOY": "${params.ALLOW_PROD_DEPLOY}"
 }
 EOF
-                '''
+                """
             }
         }
 
