@@ -19,7 +19,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git url: 'https://example.com/your-repo.git', branch: 'main'
+                git url: 'https://github.com/vimit12/Jenkins_params_framework.git', branch: 'master'
             }
         }
 
