@@ -16,11 +16,13 @@ console = Console()
 
 def display_error_table(errors):
     """Display validation errors in a formatted table"""
+    from rich.box import HEAVY
+    
     table = Table(
         title="❌ Validation Error Details", 
         show_header=True, 
         header_style="bold red",
-        border_style="blue",
+        box=HEAVY,
         show_lines=True
     )
     table.add_column("Field Name", style="cyan")
