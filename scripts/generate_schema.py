@@ -5,11 +5,12 @@ import re
 import sys
 import os
 import yaml
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def load_schema_rules(rules_file: str | None = None) -> dict:
+def load_schema_rules(rules_file: Optional[str] = None) -> dict:
     """
     Load schema customization rules from YAML file.
     Returns rules config or empty dict if file doesn't exist.
@@ -165,7 +166,7 @@ def parse_jenkinsfile_parameters(jenkinsfile_path: str) -> dict:
     return parameters
 
 
-def infer_schema_properties(parameters: dict, schema_rules: dict | None = None) -> dict:
+def infer_schema_properties(parameters: dict, schema_rules: Optional[dict] = None) -> dict:
     """
     Priority:
     1. schema_rules.yaml (explicit rules)
@@ -200,7 +201,7 @@ def infer_schema_properties(parameters: dict, schema_rules: dict | None = None) 
     return properties
 
 
-def generate_schema(jenkinsfile_path: str, rules_file: str | None = None, output_path: str | None = None) -> dict:
+def generate_schema(jenkinsfile_path: str, rules_file: Optional[str] = None, output_path: Optional[str] = None) -> dict:
     """
     Generate JSON schema from Jenkinsfile parameters.
     """
