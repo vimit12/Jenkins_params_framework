@@ -16,7 +16,11 @@ A powerful, flexible Python-based validation framework for Jenkins pipeline para
 - [Validation Flow](#validation-flow)
 - [Examples](#examples)
 - [API Reference](#api-reference)
+- [Security Considerations](#security-considerations)
+- [Exit Codes](#exit-codes)
+- [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
+- [Best Practices](#best-practices)
 
 ## 🎯 Overview
 
@@ -72,7 +76,7 @@ jenkins_param_framework/
 ## 🚀 Installation
 
 ### Prerequisites
-- Python 3.7+
+- Python 3.8+
 - pip
 
 ## Dependencies
@@ -88,7 +92,7 @@ git clone https://github.com/vimit12/Jenkins_params_framework.git
 cd Jenkins_params_framework
 
 # Install dependencies
-pip3 install -r [requirements.txt](http://_vscodecontentref_/12)
+pip3 install -r requirements.txt
 ```
 
 ## Quick Start
@@ -854,16 +858,15 @@ options:
 ```bash
 python3 scripts/validate_params.py [options]
 ```
-```bash Options:
+
+#### Options:
+```
 --input INPUT                 Path to input.json (required)
 --schema SCHEMA              Path to schema.json (required)
 --no-coerce                  Disable type coercion
 --strict                     Reject unknown parameters
---help.                      Show help message
-
+--help                       Show help message
 ```
-
-Show help message
 
 #### Examples:
 
@@ -1017,6 +1020,116 @@ EOF'''
 }
 ```
 
+### 🔐 Security Considerations
+
+1. **Credentials Handling**
+   - Never log credentials or sensitive parameter values
+   - Use Jenkins credentials store for passwords and API keys
+   - Validate credentials IDs but don't expose actual values
+
+2. **Parameter Validation**
+   - Always validate input patterns strictly
+   - Use regex patterns to reject suspicious values
+   - Implement email/URL validation for external inputs
+
+3. **Strict Mode**
+   - Always enable `--strict` mode in production
+   - Prevents injection of unexpected parameters
+   - Ensures only declared parameters are accepted
+
+4. **Access Control**
+   - Restrict who can trigger builds with parameter validation
+   - Audit parameter changes in Jenkins audit logs
+
+### 🔄 Exit Codes
+
+The validation script returns specific exit codes for automation:
+
+```
+0  - Validation successful
+1  - Validation failed (invalid parameters)
+2  - File not found (input or schema)
+3  - Configuration error (malformed YAML)
+4  - Type coercion failure
+5  - Internal error
+```
+
+**Usage in Jenkinsfile:**
+```groovy
+stage('Validate Parameters') {
+    steps {
+        sh '''
+            python3 scripts/validate_params.py \
+              --input input.json \
+              --schema schemas/deploy-service.schema.json \
+              --strict
+            
+            # Exit code 0 = success, non-zero = failure
+            if [ $? -ne 0 ]; then
+                echo "❌ Validation failed"
+                exit 1
+            fi
+        '''
+    }
+}
+```
+
+### 🧪 Testing
+
+#### Running Tests Locally
+
+```bash
+# Install test dependencies
+pip3 install pytest pytest-cov
+
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=jenkins_param_validator
+
+# Run specific test file
+pytest tests/test_validators.py -v
+```
+
+#### Testing Validation Locally
+
+```bash
+# Test schema generation
+python3 scripts/generate_schema.py --output-stdout | jq .
+
+# Test parameter validation
+python3 scripts/validate_params.py \
+  --input tests/fixtures/valid_input.json \
+  --schema schemas/deploy-service.schema.json \
+  --strict
+
+# Test without coercion
+python3 scripts/validate_params.py \
+  --input tests/fixtures/input.json \
+  --schema schemas/deploy-service.schema.json \
+  --no-coerce
+```
+
+#### Example Test Cases
+
+```bash
+# Valid parameters
+echo '{"APP_NAME": "my-app", "ENV": "dev", "IMAGE_TAG": "v1.0"}' > input.json
+python3 scripts/validate_params.py --input input.json --schema schemas/deploy-service.schema.json
+# Expected: ✅ Valid
+
+# Invalid: Missing required field
+echo '{"ENV": "dev", "IMAGE_TAG": "v1.0"}' > input.json
+python3 scripts/validate_params.py --input input.json --schema schemas/deploy-service.schema.json
+# Expected: ❌ APP_NAME is required
+
+# Invalid: Out of range
+echo '{"APP_NAME": "my-app", "ENV": "dev", "IMAGE_TAG": "v1.0", "REPLICAS": "100"}' > input.json
+python3 scripts/validate_params.py --input input.json --schema schemas/deploy-service.schema.json
+# Expected: ❌ 100 exceeds maximum of 20
+```
+
 ### 🚨 Troubleshooting
 
 **Issue:** `ModuleNotFoundError: No module named 'jsonschema'`  
@@ -1052,9 +1165,9 @@ stage('Install Dependencies') {
 **Issue:** Schema rules not being applied
 **Solution:** Verify `schema_rules.yaml` path and syntax:
 
-```groovy
+```bash
 # Check YAML syntax
-python3 -m yaml scripts/schema_rules.yaml
+python3 -c "import yaml; yaml.safe_load(open('scripts/schema_rules.yaml'))"
 
 # Generate with explicit rules path
 python3 scripts/generate_schema.py --rules scripts/schema_rules.yaml --output-stdout
@@ -1083,15 +1196,20 @@ rules:
 {"REPLICAS": "2"}    // ✅
 ```
 
-###💡 Best Practices
+### 💡 Best Practices
 
-1. Always use `schema_rules.yaml` - Define explicit constraints for clarity  
-2. Keep Jenkinsfile simple - Use schema_rules for complex validation  
-3. Enable strict mode - Catch unknown parameters early  
-4. Test locally first - Run validation before committing  
-5. Document custom validators - Explain business logic in code comments  
-6. Version your schemas - Track schema changes with code  
-7. Use meaningful error messages - Help developers understand validation failures
+1. **Always use `schema_rules.yaml`** - Define explicit constraints for clarity  
+2. **Keep Jenkinsfile simple** - Use schema_rules for complex validation  
+3. **Enable strict mode** - Catch unknown parameters early in production  
+4. **Test locally first** - Run validation before committing to repository  
+5. **Document custom validators** - Explain business logic in code comments  
+6. **Version your schemas** - Track schema changes with code using git  
+7. **Use meaningful error messages** - Help developers understand validation failures  
+8. **Validate early** - Place validation as first stage in pipeline  
+9. **Log validation results** - Keep audit trail of parameter validation  
+10. **Keep schemas DRY** - Reuse common patterns and rules  
+11. **Test edge cases** - Include boundary values in test cases  
+12. **Use type coercion wisely** - Enable only for Jenkins string parameters
 
 ### 🤝 Contributing
 
