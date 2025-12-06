@@ -57,6 +57,16 @@ def _coerce_simple(value: Any, target_type: str):
 
 
 def coerce_data(data: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Walks top-level properties and coerces based on schema["properties"][key]["type"]
+    if x-coerce=true is set.
+    Supports: integer, number, boolean, string, object, array
+
+    Examples:
+    - string '{"key": "value"}' -> object {"key": "value"}
+    - string '[1, 2, 3]' -> array [1, 2, 3]
+    - string '42' -> integer 42
+    """
     props = schema.get("properties", {})
     result = dict(data)
 
