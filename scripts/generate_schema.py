@@ -167,38 +167,31 @@ def parse_jenkinsfile_parameters(jenkinsfile_path: str) -> dict:
 
 def infer_schema_properties(parameters: dict, schema_rules: dict | None = None) -> dict:
     """
-    Infer JSON schema properties from Jenkins parameters.
-    Apply custom rules from schema_rules.yaml if available.
+    Priority:
+    1. schema_rules.yaml (explicit rules)
+    2. Jenkinsfile parameter type
+    3. Auto-generated defaults
     """
     if schema_rules is None:
         schema_rules = {}
-    
     custom_rules = schema_rules.get('rules', {})
     properties = {}
 
     for name, param in parameters.items():
+        # START WITH JENKINSFILE INFO
         schema_prop = {
             "type": param['type'],
             "description": param['description']
         }
 
-        # Add format if available (password, textarea, file, etc.)
-        if 'format' in param:
-            schema_prop['format'] = param['format']
-
-        # Check if there's a specific rule for this parameter
+        # OVERRIDE WITH schema_rules.yaml IF PRESENT
         if name in custom_rules:
-            # Merge custom rule with base schema_prop
+            # Merge: schema_rules.yaml overwrites everything
             schema_prop.update(custom_rules[name])
         else:
-            # Apply generic defaults
-            if param['type'] == 'string':
-                # Add enum constraint if available
-                if 'enum' in param:
-                    schema_prop['enum'] = param['enum']
-                elif 'format' not in param or param.get('format') not in ['password', 'file', 'credentials', 'run', 'listview', 'textarea']:
-                    schema_prop['minLength'] = 1
-
+            # Apply defaults only if not in rules
+            if param['type'] == 'string' and 'enum' not in param:
+                schema_prop['minLength'] = 1
             elif param['type'] == 'boolean':
                 schema_prop['x-coerce'] = True
 

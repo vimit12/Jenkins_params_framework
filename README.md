@@ -1,206 +1,1108 @@
 # Jenkins Parameter Validator Framework
 
-A Python-based validation framework for Jenkins pipeline parameters using JSON Schema with support for type coercion and custom validators.
+A powerful, flexible Python-based validation framework for Jenkins pipeline parameters using JSON Schema with automatic schema generation, type coercion, and custom validators.
 
-## Overview
+## 📋 Table of Contents
 
-This framework provides:
-- **JSON Schema validation** (Draft 2020-12) for Jenkins pipeline parameters
-- **Type coercion** to convert string inputs to proper types (integer, boolean, etc.)
-- **Custom plugin validators** for domain-specific validation rules
-- **Strict mode** to reject unknown parameters
-- **CLI tool** for easy integration into Jenkinsfiles
+- [Overview](#overview)
+- [Features](#features)
+- [Project Structure](#project-structure)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [How It Works](#how-it-works)
+- [Jenkins Parameter Types](#jenkins-parameter-types)
+- [Schema Rules Configuration](#schema-rules-configuration)
+- [Type Coercion](#type-coercion)
+- [Validation Flow](#validation-flow)
+- [Examples](#examples)
+- [API Reference](#api-reference)
+- [Troubleshooting](#troubleshooting)
+
+## 🎯 Overview
+
+This framework automates validation of Jenkins pipeline parameters by:
+
+1. **Parsing your Jenkinsfile** to extract parameter definitions
+2. **Auto-generating a JSON Schema** from those parameters
+3. **Applying custom rules** from `schema_rules.yaml`
+4. **Validating input parameters** against the generated schema
+5. **Coercing types** automatically (strings to integers, booleans, JSON objects, etc.)
+6. **Running custom validators** for business logic
+
+## ✨ Features
+
+- ✅ **Automatic Schema Generation** - Parse Jenkinsfile and generate JSON Schema
+- ✅ **Type Coercion** - Automatically convert strings to integers, booleans, JSON objects
+- ✅ **Rich Error Messages** - Table-formatted validation errors with field details
+- ✅ **Custom Validators** - Extend with Python plugins for complex rules
+- ✅ **Strict Mode** - Reject unknown/undeclared parameters
+- ✅ **Conditional Validation** - Field dependencies and mutual exclusivity
+- ✅ **No Plugin Dependencies** - Pure Groovy, works with standard Jenkins
+- ✅ **Format Validation** - Email, URI, date-time, regex patterns
+- ✅ **Range Constraints** - min/max, minLength/maxLength for all types
+- ✅ **Enum Support** - Restrict values to predefined choices
+- ✅ **JSON/Array Support** - Parse and validate nested JSON structures
 
 ## Project Structure
 
 ```
 .
-├── Jenkinsfile                          # Jenkins pipeline definition
+jenkins_param_framework/
+├── Jenkinsfile # Jenkins pipeline with parameters
+├── README.md # This file
+├── requirements.txt # Python dependencies
+│
 ├── scripts/
-│   └── validate_params.py               # CLI entry point
+│ ├── validate_params.py # CLI validation entry point
+│ ├── generate_schema.py # Schema generator from Jenkinsfile
+│ └── schema_rules.yaml # Custom validation rules
+│
 ├── schemas/
-│   └── deploy-service.schema.json       # Example schema
+│ └── deploy-service.schema.json # Generated JSON schema
+│
 └── jenkins_param_validator/
-    ├── __init__.py
-    ├── engine.py                        # Core validation engine
-    ├── coercion.py                      # Type coercion logic
-    ├── plugins.py                       # Custom validator plugin system
-    └── utils.py
+├── init.py
+├── engine.py # Core validation engine
+├── coercion.py # Type coercion logic
+├── plugins.py # Custom validator plugin system
+├── validators.py # Example custom validators
+└── utils.py # Utility functions
 ```
 
-## Installation
+## 🚀 Installation
+
+### Prerequisites
+- Python 3.7+
+- pip
+
+## Dependencies
+jsonschema>=4.0.0      # JSON Schema validation
+rich>=13.0.0           # Formatted table output
+pyyaml>=6.0            # Schema rules configuration
+
+### Setup
 
 ```bash
-pip install jsonschema
+# Clone the repository
+git clone https://github.com/vimit12/Jenkins_params_framework.git
+cd Jenkins_params_framework
+
+# Install dependencies
+pip3 install -r [requirements.txt](http://_vscodecontentref_/12)
 ```
 
 ## Quick Start
 
-### 1. Define Your Schema
+### Step 1: Define Jenkins Parameters
+#### Edit your `Jenkinsfile`:
 
-Create a JSON Schema file (e.g., `schemas/deploy-service.schema.json`):
+``` groovy
+pipeline {
+    agent any
 
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "properties": {
-    "APP_NAME": { "type": "string", "minLength": 2 },
-    "REPLICAS": { "type": "integer", "minimum": 1, "x-coerce": true }
-  },
-  "required": ["APP_NAME"],
-  "additionalProperties": false
+    parameters {
+        string(name: 'APP_NAME', defaultValue: 'my-api', description: 'Application name')
+        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag')
+        choice(name: 'ENV', choices: ['dev', 'qa', 'staging', 'prod'], description: 'Environment')
+        booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run tests')
+        string(name: 'REPLICAS', defaultValue: '2', description: 'Number of replicas')
+    }
+
+    stages {
+        stage('Validate Parameters') {
+            steps {
+                sh 'python3 scripts/validate_params.py --input input.json --schema schemas/deploy-service.schema.json --strict'
+            }
+        }
+    }
 }
+
 ```
 
-### 2. Validate Parameters
+### Step 2: Create Schema Rules (Optional)
+#### Create `schema_rules.yaml`:
+
+```yaml
+rules:
+  REPLICAS:
+    type: integer
+    minimum: 1
+    maximum: 20
+    x-coerce: true
+
+  IMAGE_TAG:
+    type: string
+    pattern: "^[a-zA-Z0-9._-]+$"
+
+required_fields:
+  - APP_NAME
+  - IMAGE_TAG
+```
+
+### Step 3: Generate Schema
 
 ```bash
-python3 scripts/validate_params.py \
-  --input input.json \
-  --schema schemas/deploy-service.schema.json \
-  --strict
+python3 scripts/generate_schema.py --jenkinsfile Jenkinsfile --output schemas/deploy-service.schema.json
 ```
 
-### Usage
-
-```
-usage: validate_params.py [-h] --input INPUT --schema SCHEMA [--no-coerce] [--strict]
-
-options:
-  --input INPUT      Path to input.json
-  --schema SCHEMA    Path to schema.json
-  --no-coerce        Disable type coercion
-  --strict           Reject unknown parameters
-```
-
-## Features
-
-### Type Coercion
-
-Enable automatic type conversion using the `x-coerce` property in your schema:
-
-```json
-{
-  "REPLICAS": {
-    "type": "integer",
-    "x-coerce": true
-  },
-  "RUN_TESTS": {
-    "type": "boolean",
-    "x-coerce": true
-  }
-}
-```
-
-Supported coercions:
-- `integer`: `"42"` → `42`
-- `number`: `"3.14"` → `3.14`
-- `boolean`: `"true"`, `"yes"`, `"1"` → `true`; `"false"`, `"no"`, `"0"` → `false`
-- `string`: Any value → string
-
-### Custom Validators
-
-Define custom validation logic using plugins:
-
-```json
-{
-  "x-validators": [
-    "team_validators.deploy_rules:validate_deploy"
-  ]
-}
-```
-
-Your validator function receives the data and schema:
-
-```python
-def validate_deploy(data: Dict[str, Any], schema: Dict[str, Any]):
-    if data.get("ENV") == "prod" and not data.get("ALLOW_PROD_DEPLOY"):
-        raise ValueError("Production deployment not allowed")
-```
-
-### Strict Mode
-
-Enable strict mode to reject parameters not defined in the schema:
+### Step 4: Validate Parameters
 
 ```bash
-python3 scripts/validate_params.py --input input.json --schema schema.json --strict
+python3 scripts/validate_params.py --input input.json --schema schemas/deploy-service.schema.json --strict
 ```
 
-## Jenkins Integration
+### 🔄 How It Works
 
-The [Jenkinsfile](Jenkinsfile) demonstrates full integration:
+#### 1. Parameter Parsing
+
+The framework parses your `Jenkinsfile` to extract the following details:
+
+- **Parameter name**
+- **Parameter type** (string, boolean, choice, etc.)
+- **Default value**
+- **Description**
+
+Example :
+
+
+```json
+string(name: 'REPLICAS', defaultValue: '2', description: 'Number of replicas')
+                ↓
+        {
+          "REPLICAS": {
+            "type": "string",
+            "defaultValue": "2",
+            "description": "Number of replicas"
+          }
+        }
+```
+
+### 2. Schema Generation
+
+The schema generator converts **Jenkinsfile parameters** into **JSON Schema**, including:
+
+- **Type information**
+- **Default values**
+- **Descriptions**
+- **Format constraints**
+
+---
+
+### 3. Rule Application
+
+Custom rules from `schema_rules.yaml` override auto-generated constraints.
+
+**Priority Order:**
+
+1. **schema_rules.yaml** (highest) — explicit custom rules  
+2. **Jenkinsfile** — parameter definitions  
+3. **Auto-defaults** (lowest) — generic constraints  
+
+---
+
+#### Example: Conflict Resolution
+
+```yaml
+# schema_rules.yaml
+rules:
+  REPLICAS:
+    type: integer            # Overrides Jenkinsfile's string type
+    minimum: 1
+    maximum: 20
+    x-coerce: true           # Auto-convert "2" → 2
+```
+
+#### Result
+
+
+```json
+Input: {"REPLICAS": "2"}
+After coercion: {"REPLICAS": 2}
+Validation: ✅ Valid (within 1-20 range)
+```
+
+### 4. Type Coercion
+
+Strings from Jenkins are automatically converted into proper types:
+
+- `"2"` → **2** (integer)  
+- `"true"` → **true** (boolean)  
+- `"3.14"` → **3.14** (number)  
+- `'{"key":"val"}'` → **{ key: "val" }** (object)  
+- `"[1,2,3]"` → **[1, 2, 3]** (array)
+
+---
+
+### 5. Validation
+
+Parameters are validated against the generated schema, including:
+
+- Type checking  
+- Range / length constraints  
+- Pattern matching  
+- Enum restrictions  
+- Custom business logic
+
+---
+
+### 6. Error Reporting
+
+Validation errors are displayed in a formatted table:
+**Validation Error Details**
+
+| Field Name | Value        | Type    | Error                        |
+|------------|--------------|---------|------------------------------|
+| REPLICAS   | 25           | integer | 25 is greater than max 20    |
+| IMAGE_TAG  | invalid/tag  | string  | does not match pattern       |
+
+### 🔧 Jenkins Parameter Types
+
+The framework supports all common Jenkins parameter types.
+
+| Type        | Syntax             | Schema Type     | Example                                                     |
+|-------------|--------------------|------------------|-------------------------------------------------------------|
+| String      | `string()`         | string           | `string(name: 'APP', defaultValue: 'my-app')`               |
+| Boolean     | `booleanParam()`   | boolean          | `booleanParam(name: 'RUN_TESTS', defaultValue: true)`       |
+| Choice      | `choice()`         | string (enum)    | `choice(name: 'ENV', choices: ['dev', 'prod'])`             |
+| Password    | `password()`       | string           | `password(name: 'PWD', defaultValue: '')`                   |
+| Text        | `text()`           | string           | `text(name: 'CONFIG', defaultValue: '{}')`                  |
+| File        | `file()`           | string           | `file(name: 'CERT')`                                        |
+| Credentials | `credentials()`    | string           | `credentials(name: 'GIT_CRED')`                             |
+| Run         | `run()`            | string           | `run(name: 'BUILD_NUM')`                                    |
+| ListView    | `listView()`       | string           | `listView(name: 'VIEW')`                                    |
+
+---
+
+### Example Jenkinsfile with Various Types
 
 ```groovy
-stage('Validate Parameters') {
-    steps {
-        sh """
-            python3 scripts/validate_params.py \
-              --input input.json \
-              --schema ${env.PARAM_SCHEMA} \
-              --strict
-        """
+parameters {
+    // String input
+    string(name: 'APP_NAME', defaultValue: 'my-app', description: 'App name')
+    
+    // Dropdown selection
+    choice(name: 'ENV', choices: ['dev', 'staging', 'prod'], description: 'Environment')
+    
+    // Checkbox
+    booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run tests')
+    
+    // Password (masked in UI)
+    password(name: 'DB_PASSWORD', defaultValue: '', description: 'DB password')
+    
+    // Multiline text
+    text(name: 'CONFIG_JSON', defaultValue: '{}', description: 'Configuration JSON')
+    
+    // File upload
+    file(name: 'CERT_FILE', description: 'SSL certificate')
+    
+    // Jenkins credentials
+    credentials(name: 'GIT_CREDENTIALS', description: 'Git credentials ID')
+}
+```
+
+### 📝 Schema Rules Configuration
+
+#### Basic Structure
+
+`schema_rules.yaml` defines custom validation rules:
+
+```yaml
+# schema_rules.yaml
+rules:
+  PARAMETER_NAME:
+    type: string|integer|boolean|object|array
+    # Type-specific constraints
+    minLength: 2
+    maxLength: 50
+    minimum: 1
+    maximum: 100
+    pattern: "^regex$"
+    enum: [val1, val2]
+    
+    # Coercion
+    x-coerce: true
+    
+    # Format
+    format: email|uri|date-time
+    
+    # Nested object schema
+    properties:
+      nested_key: {type: string}
+    required: [nested_key]
+    
+    description: "Field description"
+
+required_fields:
+  - REQUIRED_PARAM_1
+  - REQUIRED_PARAM_2
+
+conditional_required:
+  - condition: "ENV == 'prod'"
+    requires: ["ALLOW_PROD_DEPLOY"]
+
+mutually_exclusive:
+  - ["PARAM_A", "PARAM_B"]
+
+error_messages:
+  PARAMETER_NAME:
+    pattern: "Custom error message"
+    minimum: "Must be at least X"
+
+custom_validators:
+  - "module.path:function_name"
+
+options:
+  strict_mode: true
+  auto_coerce_numbers: false
+  trim_strings: true
+
+```
+
+Comprehensive Example
+
+```yaml
+rules:
+  # String with pattern
+  APP_NAME:
+    type: string
+    minLength: 2
+    maxLength: 50
+    pattern: "^[a-z0-9](-?[a-z0-9])*$"
+    description: "Application name (lowercase alphanumeric with hyphens)"
+
+  # Docker image tag
+  IMAGE_TAG:
+    type: string
+    pattern: "^[a-zA-Z0-9._-]+$"
+    minLength: 1
+    maxLength: 128
+    description: "Docker image tag"
+
+  # Semantic version
+  VERSION:
+    type: string
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(-(alpha|beta|rc))?$"
+    description: "Semantic version (e.g., 1.2.3 or 1.2.3-rc1)"
+
+  # Integer with range
+  REPLICAS:
+    type: integer
+    minimum: 1
+    maximum: 20
+    x-coerce: true
+    description: "Number of replicas"
+
+  # Enum choice
+  LOG_LEVEL:
+    type: string
+    enum: ["DEBUG", "INFO", "WARNING", "ERROR"]
+    description: "Logging level"
+
+  # Email format
+  NOTIFICATION_EMAIL:
+    type: string
+    format: email
+    description: "Email for notifications"
+
+  # URI/URL format
+  WEBHOOK_URL:
+    type: string
+    format: uri
+    description: "Webhook URL"
+
+  # JSON object with schema
+  CONFIG_JSON:
+    type: object
+    x-coerce: true
+    properties:
+      replicas:
+        type: integer
+        minimum: 1
+      environment:
+        type: string
+        enum: ["dev", "prod"]
+      debug:
+        type: boolean
+    required: ["environment"]
+    description: "Configuration object"
+
+  # Boolean with coercion
+  ENABLE_FEATURE:
+    type: boolean
+    x-coerce: true
+    description: "Enable feature flag"
+
+required_fields:
+  - APP_NAME
+  - IMAGE_TAG
+  - ENV
+
+conditional_required:
+  - condition: "ENV == 'prod'"
+    requires: ["ALLOW_PROD_DEPLOY", "NOTIFICATION_EMAIL"]
+  - condition: "ENABLE_MONITORING == true"
+    requires: ["MONITORING_ENDPOINT"]
+
+mutually_exclusive:
+  - ["RUN_TESTS", "SKIP_TESTS"]
+  - ["ENABLE_CACHE", "DISABLE_CACHE"]
+
+error_messages:
+  APP_NAME:
+    pattern: "App name must contain only lowercase letters, numbers, and hyphens"
+    minLength: "App name must be at least 2 characters"
+  
+  REPLICAS:
+    minimum: "At least 1 replica is required"
+    maximum: "Maximum 20 replicas allowed"
+
+custom_validators:
+  - "jenkins_param_validator.validators:validate_deployment_rules"
+  - "jenkins_param_validator.validators:validate_resource_limits"
+
+options:
+  strict_mode: true
+  auto_coerce_numbers: false
+  trim_strings: true
+
+```
+
+### 💫 Type Coercion
+
+#### What is `x-coerce`?
+
+`x-coerce` is a custom JSON Schema extension that automatically converts **string values into their proper types**.  
+This is essential because Jenkins sends **all parameter values as strings**, regardless of their declared type.
+
+#### Why Is It Needed?
+
+Jenkins always passes parameters as strings:
+
+- `"2"` should become **2** (integer)
+- `"true"` should become **true** (boolean)
+- `"3.14"` should become **3.14** (number)
+- `'{"key":"val"}'` should become **{ "key": "val" }** (object)
+- `"[1,2,3]"` should become **[1, 2, 3]** (array)
+
+With `x-coerce: true`, your validation system safely normalizes these values before schema validation.
+
+```groovy
+parameters {
+    string(name: 'REPLICAS', defaultValue: '2')        // String "2"
+    booleanParam(name: 'RUN_TESTS', defaultValue: true) // String "true"
+}
+
+// In the pipeline, they're passed as:
+// {"REPLICAS": "2", "RUN_TESTS": "true"}
+
+```
+
+Without coercion:
+
+```bash
+Input: {"REPLICAS": "2"}
+Error: "2" is not of type integer
+```
+
+With coercion `(x-coerce: true)`:
+
+```bash
+Input: {"REPLICAS": "2"}
+After coercion: {"REPLICAS": 2}
+Result: ✅ Valid
+```
+
+### Supported Coercions
+
+| Target Type | From String         | Example                          |
+|-------------|----------------------|----------------------------------|
+| integer     | Numeric string       | `"42"` → **42**                  |
+| number      | Numeric string       | `"3.14"` → **3.14**              |
+| boolean     | True values          | `"true"`, `"1"`, `"yes"` → true  |
+| boolean     | False values         | `"false"`, `"0"`, `"no"` → false |
+| object      | JSON string          | `'{"key":"val"}'` → `{ key: "val" }` |
+| array       | JSON array string    | `"[1,2,3]"` → `[1, 2, 3]`         |
+| string      | Any value            | `123` → `"123"`                  |
+
+---
+
+### Example Configuration
+
+```yaml
+rules:
+  REPLICAS:
+    type: integer
+    x-coerce: true          # "2" → 2
+
+  RUN_TESTS:
+    type: boolean
+    x-coerce: true          # "true" → true
+
+  CONFIG:
+    type: object
+    x-coerce: true          # '{"a":"b"}' → {a: "b"}
+
+  TAGS:
+    type: array
+    x-coerce: true          # '[1,2,3]' → [1, 2, 3]
+```
+
+
+### 🔄 Validation Flow
+
+#### Complete Validation Pipeline
+
+1. **Load Input JSON**  
+   ↓  
+2. **Load Schema** (from file or generated)  
+   ↓  
+3. **Type Coercion** (if `x-coerce: true`)  
+   - Convert `"2"` → **2**  
+   - Convert `"true"` → **true**  
+   - Convert `"{}"` → **{}**  
+   ↓  
+4. **Strict Mode Check** (if `--strict` flag)  
+   - Reject unknown parameters  
+   - Only allow declared fields  
+   ↓  
+5. **JSON Schema Validation**  
+   - Type checking  
+   - Range constraints (min/max)  
+   - Length constraints (minLength/maxLength)  
+   - Pattern matching (regex)  
+   - Enum validation  
+   - Required fields  
+   ↓  
+6. **Custom Validators** (if defined)  
+   - Business logic checks  
+   - Conditional requirements  
+   - Complex rules  
+   ↓  
+7. **Return Results**  
+   - ✅ **Valid:** return coerced data  
+   - ❌ **Invalid:** display error table  
+
+---
+
+### Validation Examples
+
+#### Example 1: Simple Type Coercion
+
+```yaml
+# schema_rules.yaml
+rules:
+  PORT:
+    type: integer
+    minimum: 1024
+    x-coerce: true
+```
+
+```json
+// input.json
+{"PORT": "8080"}
+
+// After validation:
+{"PORT": 8080}  // ✅ Valid
+```
+
+### Example 2: Pattern Validation
+
+```yaml
+# schema_rules.yaml
+rules:
+  IMAGE_TAG:
+    type: string
+    pattern: "^[a-zA-Z0-9._-]+$"
+```
+
+```json
+// input.json (valid)
+{"IMAGE_TAG": "v1.2.3"}  // ✅ Matches pattern
+
+// input.json (invalid)
+{"IMAGE_TAG": "v1.2.3/bad"}  // ❌ Contains slash
+```
+
+### Example 3: Range Constraint
+
+```yaml
+# schema_rules.yaml
+rules:
+  REPLICAS:
+    type: integer
+    minimum: 1
+    maximum: 20
+    x-coerce: true
+```
+
+```json
+// input.json (valid)
+{"REPLICAS": "5"}  // ✅ Within range 1-20
+
+// input.json (invalid)
+{"REPLICAS": "25"}  // ❌ Exceeds maximum
+```
+
+### Example 4: Conditional Requirement
+
+```yaml
+# schema_rules.yaml
+conditional_required:
+  - condition: "ENV == 'prod'"
+    requires: ["ALLOW_PROD_DEPLOY"]
+```
+
+```json
+// Valid: Prod with flag
+{"ENV": "prod", "ALLOW_PROD_DEPLOY": true}  // ✅
+
+// Invalid: Prod without flag
+{"ENV": "prod"}  // ❌ Missing ALLOW_PROD_DEPLOY
+```
+
+### 📚 Examples
+
+Complete Jenkinsfile Example
+
+```groovy
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'APP_NAME', defaultValue: 'my-api', description: 'Application name')
+        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag')
+        choice(name: 'ENV', choices: ['dev', 'qa', 'staging', 'prod'], description: 'Target environment')
+        booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run unit tests')
+        string(name: 'REPLICAS', defaultValue: '2', description: 'Number of replicas')
+        string(name: 'CPU_LIMIT', defaultValue: '500m', description: 'CPU limit')
+        string(name: 'MEMORY_LIMIT', defaultValue: '512Mi', description: 'Memory limit')
+        booleanParam(name: 'ALLOW_PROD_DEPLOY', defaultValue: false, description: 'Allow production deployment')
+        text(name: 'CONFIG_JSON', defaultValue: '{}', description: 'Configuration JSON')
+    }
+
+    environment {
+        PARAM_SCHEMA = "schemas/deploy-service.schema.json"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git url: 'https://github.com/vimit12/Jenkins_params_framework.git', branch: 'master'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'pip3 install -r requirements.txt'
+            }
+        }
+
+        stage('Generate Schema') {
+            steps {
+                sh 'python3 scripts/generate_schema.py --jenkinsfile Jenkinsfile --output ${PARAM_SCHEMA}'
+            }
+        }
+
+        stage('Write Params JSON') {
+            steps {
+                sh '''
+                    cat > input.json << 'EOF'
+{
+  "APP_NAME": "${params.APP_NAME}",
+  "IMAGE_TAG": "${params.IMAGE_TAG}",
+  "ENV": "${params.ENV}",
+  "RUN_TESTS": "${params.RUN_TESTS}",
+  "REPLICAS": "${params.REPLICAS}",
+  "CPU_LIMIT": "${params.CPU_LIMIT}",
+  "MEMORY_LIMIT": "${params.MEMORY_LIMIT}",
+  "ALLOW_PROD_DEPLOY": "${params.ALLOW_PROD_DEPLOY}",
+  "CONFIG_JSON": "${params.CONFIG_JSON}"
+}
+EOF
+                '''
+            }
+        }
+
+        stage('Validate Parameters') {
+            steps {
+                sh """
+                    python3 scripts/validate_params.py \
+                      --input input.json \
+                      --schema ${env.PARAM_SCHEMA} \
+                      --strict
+                """
+            }
+        }
+
+        stage('Build & Deploy') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
+            steps {
+                echo "✅ All parameters validated successfully!"
+                echo "Deploying ${params.APP_NAME}:${params.IMAGE_TAG} to ${params.ENV}"
+                // Your deployment logic here
+            }
+        }
     }
 }
 ```
 
-## API Reference
+Complete `schema_rules.yaml` Example
 
-### [`validate_params()`](jenkins_param_validator/engine.py)
+```yaml
+# scripts/schema_rules.yaml
+
+rules:
+  APP_NAME:
+    type: string
+    minLength: 2
+    maxLength: 50
+    pattern: "^[a-z0-9](-?[a-z0-9])*$"
+    description: "Application name (lowercase alphanumeric with hyphens)"
+
+  IMAGE_TAG:
+    type: string
+    pattern: "^[a-zA-Z0-9._-]+$"
+    minLength: 1
+    maxLength: 128
+    description: "Docker image tag"
+
+  ENV:
+    type: string
+    enum: ["dev", "qa", "staging", "prod"]
+    description: "Target environment"
+
+  RUN_TESTS:
+    type: boolean
+    x-coerce: true
+    description: "Run unit tests before deploy"
+
+  REPLICAS:
+    type: integer
+    minimum: 1
+    maximum: 20
+    x-coerce: true
+    description: "Number of replicas"
+
+  CPU_LIMIT:
+    type: string
+    pattern: "^[0-9]+(m)?$"
+    description: "CPU limit (e.g., 500m)"
+
+  MEMORY_LIMIT:
+    type: string
+    pattern: "^[0-9]+(Mi|Gi)$"
+    description: "Memory limit (e.g., 512Mi or 2Gi)"
+
+  ALLOW_PROD_DEPLOY:
+    type: boolean
+    x-coerce: true
+    description: "Gate for production deployment"
+
+  CONFIG_JSON:
+    type: object
+    x-coerce: true
+    properties:
+      replicas:
+        type: integer
+        minimum: 1
+      debug:
+        type: boolean
+      features:
+        type: array
+        items:
+          type: string
+    description: "Configuration JSON object"
+
+required_fields:
+  - APP_NAME
+  - IMAGE_TAG
+  - ENV
+
+conditional_required:
+  - condition: "ENV == 'prod'"
+    requires: ["ALLOW_PROD_DEPLOY"]
+
+mutually_exclusive:
+  - ["RUN_TESTS", "SKIP_TESTS"]
+
+error_messages:
+  APP_NAME:
+    pattern: "App name must contain only lowercase letters, numbers, and hyphens"
+    minLength: "App name must be at least 2 characters"
+  
+  REPLICAS:
+    minimum: "At least 1 replica is required"
+    maximum: "Maximum 20 replicas allowed"
+
+  ENV:
+    enum: "Invalid environment. Must be one of: dev, qa, staging, prod"
+
+custom_validators:
+  - "jenkins_param_validator.validators:validate_deployment_rules"
+
+options:
+  strict_mode: true
+  auto_coerce_numbers: false
+  trim_strings: true
+```
+
+### 📖 API Reference
+
+`validate_params.py` - CLI Tool
+```bash
+python3 scripts/validate_params.py [options]
+```
+```bash Options:
+--input INPUT                 Path to input.json (required)
+--schema SCHEMA              Path to schema.json (required)
+--no-coerce                  Disable type coercion
+--strict                     Reject unknown parameters
+--help.                      Show help message
+
+```
+
+Show help message
+
+#### Examples:
+
+```bash
+# Basic validation
+python3 scripts/validate_params.py --input input.json --schema schema.json
+
+# With strict mode (reject unknown params)
+python3 scripts/validate_params.py --input input.json --schema schema.json --strict
+
+# Without type coercion
+python3 scripts/validate_params.py --input input.json --schema schema.json --no-coerce
+```
+
+`generate_schema.py` - Schema Generator
+
+```bash
+Options:
+--jenkinsfile PATH           Path to Jenkinsfile (default: Jenkinsfile)
+--rules PATH                 Path to schema_rules.yaml (default: scripts/schema_rules.yaml)
+--output PATH                Output schema path (default: schemas/deploy-service.schema.json)
+--output-stdout              Print schema to stdout instead of file
+--help                       Show help message
+```
+
+### Examples:
+
+```bash
+# Generate with defaults
+python3 scripts/generate_schema.py
+
+# Generate with custom rules
+python3 scripts/generate_schema.py --rules custom-rules.yaml --output custom-schema.json
+
+# Print to stdout
+python3 scripts/generate_schema.py --output-stdout | jq .
+```
 
 ```python
-def validate_params(
-    input_file: str,
-    schema_file: str,
-    *,
-    coerce: bool = True,
-    strict: bool = False
-) -> Dict[str, Any]
+from jenkins_param_validator.engine import validate_params, ValidationError
+
+try:
+    result = validate_params(
+        input_file='input.json',
+        schema_file='schema.json',
+        coerce=True,      # Enable type coercion
+        strict=False      # Reject unknown parameters
+    )
+    print(f"✅ Valid: {result}")
+except ValidationError as e:
+    print(f"❌ Invalid: {e}")
+except Exception as e:
+    print(f"💥 Error: {e}")
 ```
 
-Returns validated (and optionally coerced) configuration dictionary.
+### 🔧 Priority Rules
 
-Raises `ValidationError` on schema violations or custom validator failures.
+When Jenkinsfile parameters and `schema_rules.yaml` differ, the framework follows this priority:
 
-### [`coerce_data()`](jenkins_param_validator/coercion.py)
+#### Priority Order
+1. **schema_rules.yaml (Highest)** — Explicit custom rules override everything  
+2. **Jenkinsfile** — Parameter definitions used if not in rules  
+3. **Auto-generated defaults (Lowest)** — Applied if not defined elsewhere  
 
-Converts top-level properties based on schema type definitions and `x-coerce` flag.
+### Example with Conflict Resolution
 
-### [`run_custom_validators()`](jenkins_param_validator/plugins.py)
-
-Executes custom validators specified in schema's `x-validators` array.
-
-## Example Schema
-
-See [schemas/deploy-service.schema.json](schemas/deploy-service.schema.json) for a complete example with:
-- Required parameters
-- Type constraints (string patterns, integer ranges)
-- Enum restrictions
-- Conditional coercion rules
-
-## Error Handling
-
-The CLI provides clear error messages:
-
-```
-❌ Parameter validation failed
-
-Schema validation failed:
-[REPLICAS] 25 is greater than the maximum of 20
-[IMAGE_TAG] 'invalid/tag' does not match '^[a-zA-Z0-9._-]+$'
+```groovy
+// Jenkinsfile
+parameters {
+    string(name: 'REPLICAS', defaultValue: '2')  // Type: string
+}
 ```
 
-Exit codes:
-- `0`: Validation successful
-- `1`: Validation error
-- `2`: Unexpected error
+```yaml
+# schema_rules.yaml
+rules:
+  REPLICAS:
+    type: integer          # Override: change to integer
+    minimum: 1
+    maximum: 20
+    x-coerce: true         # Auto-convert "2" → 2
+```
 
-## Development
+Result:
 
-Extend the framework by:
-1. Adding custom coercion types in [`coercion.py`](jenkins_param_validator/coercion.py)
-2. Creating custom validators as Python modules
-3. Adding new schema properties with `x-` prefix convention
+Final type: integer (from schema_rules.yaml)  
+Coercion: Enabled (from schema_rules.yaml)  
+Input: `{"REPLICAS": "2"} ` 
+After validation: `{"REPLICAS": 2}` ✅  
+
+No Conflict Case
+
+### 🎓 Complete Workflow
+Day 1: Setup
+
+```bash
+# 1. Clone repository
+git clone https://github.com/vimit12/Jenkins_params_framework.git
+cd Jenkins_params_framework
+
+# 2. Install dependencies
+pip3 install -r requirements.txt
+
+# 3. Create your Jenkinsfile with parameters
+# (edit Jenkinsfile)
+
+# 4. Create schema_rules.yaml with custom rules
+# (create scripts/schema_rules.yaml)
+
+# 5. Test schema generation locally
+python3 scripts/generate_schema.py --output-stdout
+```
+
+Day 2: In Jenkins
+
+```groovy
+pipeline {
+    stages {
+        stage('Install Dependencies') {
+            steps {
+                sh 'pip3 install -r requirements.txt'
+            }
+        }
+
+        stage('Generate Schema') {
+            steps {
+                sh 'python3 scripts/generate_schema.py --jenkinsfile Jenkinsfile --output schemas/deploy-service.schema.json'
+            }
+        }
+
+        stage('Write Params JSON') {
+            steps {
+                sh '''cat > input.json << 'EOF'
+{...parameters...}
+EOF'''
+            }
+        }
+
+        stage('Validate Parameters') {
+            steps {
+                sh 'python3 scripts/validate_params.py --input input.json --schema schemas/deploy-service.schema.json --strict'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo "Parameters validated! Proceeding..."
+            }
+        }
+    }
+}
+```
+
+### 🚨 Troubleshooting
+
+**Issue:** `ModuleNotFoundError: No module named 'jsonschema'`  
+**Solution:** Install requirements
+
+```bash
+pip3 install -r requirements.txt
+```
+
+**Issue:** `No parameters block found in Jenkinsfile`
+**Solution:** Ensure your Jenkinsfile has a parameters block:
+
+```groovy
+pipeline {
+    parameters {
+        string(name: 'APP_NAME', defaultValue: 'my-app')
+    }
+}
+
+```
+
+**Issue:** `Validation passes locally but fails in Jenkins`
+**Solution:**  Ensure Jenkins uses the same Python version and dependencies:
+
+```groovy
+stage('Install Dependencies') {
+    steps {
+        sh 'pip3 install -r requirements.txt'
+    }
+}
+```
+
+**Issue:** Schema rules not being applied
+**Solution:** Verify `schema_rules.yaml` path and syntax:
+
+```groovy
+# Check YAML syntax
+python3 -m yaml scripts/schema_rules.yaml
+
+# Generate with explicit rules path
+python3 scripts/generate_schema.py --rules scripts/schema_rules.yaml --output-stdout
+```
+
+**Issue:** Coercion not working
+**Solution:** Ensure x-coerce: true is set in `schema_rules.yaml`:
+
+```yaml
+rules:
+  REPLICAS:
+    type: integer
+    x-coerce: true  # Must be true
+```
+
+**Issue:** Type coercion failure error
+**Error:** `ValueError: Coercion failed for 'REPLICAS': Cannot coerce '...' to integer`
+
+**Solution:** Check input value is convertible:
+
+```json
+// Invalid: Non-numeric string
+{"REPLICAS": "abc"}  // ❌
+
+// Valid
+{"REPLICAS": "2"}    // ✅
+```
+
+###💡 Best Practices
+
+1. Always use `schema_rules.yaml` - Define explicit constraints for clarity  
+2. Keep Jenkinsfile simple - Use schema_rules for complex validation  
+3. Enable strict mode - Catch unknown parameters early  
+4. Test locally first - Run validation before committing  
+5. Document custom validators - Explain business logic in code comments  
+6. Version your schemas - Track schema changes with code  
+7. Use meaningful error messages - Help developers understand validation failures
+
+### 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository  
+2. Create a feature branch  
+3. Make your changes  
+4. Test thoroughly  
+5. Submit a pull request
+
 
 ## License
 
