@@ -852,6 +852,97 @@ options:
   trim_strings: true
 ```
 
+## **Shared Library / Reuse In Other Pipelines**
+
+You can reuse this mini-framework across other pipelines in two common ways:
+
+- Git submodule / checkout inside pipeline workspace (recommended):
+  - Add this repository as a submodule or checkout during the pipeline, then call the bundled script directly.
+  - Example Jenkinsfile snippet:
+
+```groovy
+stage('Validate Parameters') {
+  steps {
+    // Ensure repo is present in workspace (checkout or submodule)
+    sh '''
+      python3 scripts/validate_params.py \
+        --input input.json \
+        --schema schemas/deploy-service.schema.json \
+        --strict
+    '''
+  }
+}
+```
+
+- Use Jenkins Shared Library wrapper (simple wrapper included in `jenkins_shared_lib/vars/validateParams.groovy`):
+  - Add this repository to Jenkins Shared Libraries (or copy `validateParams.groovy` into your shared library `vars/` folder).
+  - In your Jenkinsfile call the wrapper:
+
+```groovy
+@Library('your-shared-libs') _
+
+pipeline {
+  agent any
+  stages {
+    stage('Validate Params') {
+      steps {
+        // Uses the wrapper which runs the bundled Python script
+        validateParams(input: 'input.json', schema: 'schemas/deploy-service.schema.json', strict: true)
+      }
+    }
+  }
+}
+```
+
+Notes:
+- The wrapper executes the `scripts/validate_params.py` script from the workspace. Ensure the repo is checked out or that the shared library includes the script.
+- Keep Python dependencies available on the Jenkins agent (use a virtualenv or install via `pip3 install -r requirements.txt` in an earlier stage).
+Notes:
+- The wrapper executes the `scripts/validate_params.py` script from the workspace. Ensure the repo is checked out or that the shared library includes the script.
+- Keep Python dependencies available on the Jenkins agent (use a virtualenv or install via `pip3 install -r requirements.txt` in an earlier stage).
+
+### Using the library as `@Library('param-validator') _`
+
+To consume this repository with the exact identifier `param-validator`, configure Jenkins Global Pipeline Libraries:
+
+- Go to **Manage Jenkins → Configure System → Global Pipeline Libraries**
+- Add a new library with:
+  - **Name:** `param-validator`
+  - **Default Version:** the branch or tag you want (e.g., `master`)
+  - **Retrieval method / SCM:** point to this Git repository URL
+
+Important: Jenkins Shared Libraries expect a `vars/` directory at the repository root. This repository provides `vars/validateParams.groovy`, so once configured you can reference it directly with `@Library('param-validator') _` in your Jenkinsfiles.
+
+Example Jenkinsfile using `@Library('param-validator')`:
+
+```groovy
+@Library('param-validator') _
+
+pipeline {
+  agent any
+  stages {
+    stage('Checkout') {
+      steps {
+        // Ensure Python scripts are present in the workspace if the wrapper needs them
+        checkout scm
+      }
+    }
+
+    stage('Validate Params') {
+      steps {
+        validateParams(input: 'input.json', schema: 'schemas/deploy-service.schema.json', strict: true)
+      }
+    }
+  }
+}
+```
+
+Notes:
+- If your shared library wrapper relies on `scripts/validate_params.py` being present in the workspace, make sure to `checkout` this repository (or copy the Python scripts into the shared library) before calling `validateParams`.
+- Prefer preparing a virtualenv and installing requirements in an earlier stage so the agent has the necessary Python packages.
+
+```
+
 ### 📖 API Reference
 
 `validate_params.py` - CLI Tool
