@@ -5,13 +5,17 @@
   "properties": {
     "APP_NAME": {
       "type": "string",
-      "description": "App name",
-      "minLength": 1
+      "description": "Application name (lowercase alphanumeric with hyphens)",
+      "minLength": 2,
+      "maxLength": 50,
+      "pattern": "^[a-z0-9](-?[a-z0-9])*$"
     },
     "IMAGE_TAG": {
       "type": "string",
-      "description": "Image tag",
-      "minLength": 1
+      "description": "Docker image tag",
+      "pattern": "^[a-zA-Z0-9._-]+$",
+      "minLength": 1,
+      "maxLength": 128
     },
     "REPLICAS": {
       "type": "integer",
@@ -22,13 +26,13 @@
     },
     "CPU_LIMIT": {
       "type": "string",
-      "description": "CPU limit",
-      "pattern": "^[0-9]+m$"
+      "description": "CPU limit (e.g., 500m or 2)",
+      "pattern": "^[0-9]+(m|)$"
     },
     "MEMORY_LIMIT": {
       "type": "string",
-      "description": "Memory limit",
-      "pattern": "^[0-9]+Mi$"
+      "description": "Memory limit (e.g., 512Mi or 2Gi)",
+      "pattern": "^[0-9]+(Mi|Gi)$"
     },
     "RUN_TESTS": {
       "type": "boolean",
@@ -37,18 +41,12 @@
     },
     "ALLOW_PROD_DEPLOY": {
       "type": "boolean",
-      "description": "Allow prod deploy",
+      "description": "Allow production deployment",
       "x-coerce": true
     },
     "ENV": {
       "type": "string",
-      "description": "Environment",
-      "enum": [
-        "dev",
-        "qa",
-        "staging",
-        "prod"
-      ]
+      "description": "Environment"
     }
   },
   "additionalProperties": false,
